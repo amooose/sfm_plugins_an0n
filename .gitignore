@@ -11,3 +11,4 @@ shadersrc/shaders
 *.lib
 *.pdB
 temp
+/src/lib/PluginLoadInfo.cpp
