@@ -5,7 +5,7 @@ VisualStudioVersion = 17.13.35931.197
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libplugin", "src\lib\libplugin.vcxproj", "{5A9789A1-30EE-4100-89D8-CE81B3F06633}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TimelinePrecisionPatch", "src\plugins\scriptupload\scriptupload.vcxproj", "{2C099BF1-49A9-43D2-998B-D0B5E44DF487}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TimelinePrecisionPatch", "src\plugins\timelineprecisionpatch\timelineprecisionpatch.vcxproj", "{2C099BF1-49A9-43D2-998B-D0B5E44DF487}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
