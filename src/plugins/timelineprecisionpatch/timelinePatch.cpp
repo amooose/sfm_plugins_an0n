@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <windows.h>
 #include <fstream>
+#include "pluginCleanup.h"
 
 class CPlugin_ScriptUpload : public IServerPluginCallbacks
 {
@@ -17,7 +18,7 @@ class CPlugin_ScriptUpload : public IServerPluginCallbacks
 	void Unload( void ) override {}
 	void Pause( void ) override {}
 	void UnPause( void ) override {}
-	const char* GetPluginDescription( void ) override { return PLUGIN_NAME; }
+	const char* GetPluginDescription( void ) override { return "Keyframe Hitbox Patch"; }
 	void LevelInit( char const* pMapName ) override {}
 	void ServerActivate( edict_t* pEdictList, int edictCount, int clientMax ) override {}
 	void GameFrame( bool simulating ) override {}
@@ -35,7 +36,7 @@ class CPlugin_ScriptUpload : public IServerPluginCallbacks
 	void OnEdictAllocated( edict_t* edict ) override {}
 	void OnEdictFreed( const edict_t* edict )  override {}
 };
-
+int PLUGIN_VERSION = 1;
 int __stdcall convertScaledIntToCoord(int thisPtr, int scaledValue)
 {
 	// original logic and values
@@ -62,18 +63,32 @@ int __fastcall hookedConvertScaledIntToCoord(int thisPtr, void* edx, int scaledV
 	return convertScaledIntToCoord(thisPtr, scaledValue);
 }
 
-int GetSizeConfigValue() {
-	int value = 0;
-	std::ifstream file(std::filesystem::current_path() / "workshop/scripts/sfm/mainmenu/an0n/size.cfg");
-	if (file >> value) return value;
-	return 0; 
+
+int GetConfigInt(const std::string& key) {
+	std::ifstream file(std::filesystem::current_path() / "workshop/scripts/sfm/mainmenu/an0n/cfg/hitbox_size.cfg");
+	if (!file.is_open()) return -1;
+
+	std::string line;
+	std::string searchKey = key + "=";
+
+	while (std::getline(file, line)) {
+		if (line.compare(0, searchKey.length(), searchKey) == 0) {
+			try {
+				return std::stoi(line.substr(searchKey.length()));
+			}
+			catch (...) {
+				return -1;
+			}
+		}
+	}
+	return -1;
 }
 
 void patchHitbox(uintptr_t base) {
 	uintptr_t base_addr = (uintptr_t)base;
 
 	//try to load saved config to auto apply
-	int size = GetSizeConfigValue();
+	int size = GetConfigInt("size");
 	if (size == 0) {
 		return;
 	}
@@ -91,6 +106,7 @@ bool CPlugin_ScriptUpload::Load( CreateInterfaceFn interfaceFactory, CreateInter
 	LOG( "Keyframe Hitbox Patch loading...\n" );
 
 	auto ifm_base = ( unsigned char* )GetModuleHandle( "ifm" );
+
 	if ( ifm_base == NULL )
 	{
 		LOG( "Failed to find ifm\n" );
@@ -99,9 +115,17 @@ bool CPlugin_ScriptUpload::Load( CreateInterfaceFn interfaceFactory, CreateInter
 
 	{
 		uintptr_t addr3 = (uintptr_t)ifm_base + 0x1651E0;
-		Patch::WriteJump((void*)addr3, (void*)hookedConvertScaledIntToCoord, 0);
+		int no_px = GetConfigInt("no_px");
+		if (no_px != 1) {
+
+			Patch::WriteJump((void*)addr3, (void*)hookedConvertScaledIntToCoord, 0);
+		}
 		std::string cwd = std::filesystem::current_path().string();
+		std::filesystem::path vdfPath = std::filesystem::current_path() / "workshop/addons/timelineprecisionpatch.vdf";
+
+		cleanupPlugins(vdfPath.string());
 		patchHitbox((uintptr_t)ifm_base);
+
 	}
 
 	return true;
