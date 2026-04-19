@@ -27,12 +27,12 @@ bool cleanupPlugins(const std::string& vdfFilePath) {
     if (!fs::exists(searchDir)) return false;
 
     std::string prefix = "timelineprecisionpatch_";
-
+    std::string suff = ".dll";
     //Delete older plugin .dlls since SFM wont clean up non .dll files
     for (const auto& entry : fs::directory_iterator(searchDir)) {
         std::string filename = entry.path().filename().string();
 
-        if (filename.rfind(prefix, 0) == 0 && entry.path().filename() != targetFilePath.filename()) {
+        if (filename.rfind(prefix, 0) == 0 && entry.path().extension().string().rfind(suff, 0) == 0 && entry.path().filename() != targetFilePath.filename()) {
             try {
                 fs::remove(entry.path());
             }

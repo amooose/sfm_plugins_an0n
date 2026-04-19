@@ -36,7 +36,7 @@ class CPlugin_ScriptUpload : public IServerPluginCallbacks
 	void OnEdictAllocated( edict_t* edict ) override {}
 	void OnEdictFreed( const edict_t* edict )  override {}
 };
-int PLUGIN_VERSION = 1;
+
 int __stdcall convertScaledIntToCoord(int thisPtr, int scaledValue)
 {
 	// original logic and values
