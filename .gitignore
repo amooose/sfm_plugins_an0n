@@ -12,3 +12,4 @@ shadersrc/shaders
 *.pdB
 temp
 /src/lib/PluginLoadInfo.cpp
+/DustTest
