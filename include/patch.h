@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Windows.h>
+#include <cstring>
 
 #define DEFINE_NAKED_HOOK( name ) void* name = NULL; \
 void* Ret_##name = NULL; \
@@ -30,7 +31,7 @@ namespace Patch
 
 		memcpy( address, &data, sizeof( data ) );
 
-		VirtualProtect( address, 5, oldProtect, &oldProtect );
+		VirtualProtect(address, sizeof(data), oldProtect, &oldProtect);
 	}
 
 	// writes nop instructions

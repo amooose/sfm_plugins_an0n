@@ -3,14 +3,14 @@
 // by an0nymooose
 // 
 // Plugin loader and Plugin template by ficool2
-
+#include "pluginCleanup.h"
 #include "plugin.h"
 #include "patch.h"
 #include <cmath>
 #include <filesystem>
 #include <windows.h>
 #include <fstream>
-#include "pluginCleanup.h"
+#include "TrampolineHook.h"
 
 class CPlugin_ScriptUpload : public IServerPluginCallbacks
 {
@@ -36,6 +36,27 @@ class CPlugin_ScriptUpload : public IServerPluginCallbacks
 	void OnEdictAllocated( edict_t* edict ) override {}
 	void OnEdictFreed( const edict_t* edict )  override {}
 };
+
+int GetConfigInt(const std::string& key) {
+	std::ifstream file(std::filesystem::current_path() / "workshop/scripts/sfm/mainmenu/an0n/cfg/hitbox_size.cfg");
+	if (!file.is_open()) return -1;
+
+	std::string line;
+	std::string searchKey = key + "=";
+
+	while (std::getline(file, line)) {
+		if (line.compare(0, searchKey.length(), searchKey) == 0) {
+			try {
+				return std::stoi(line.substr(searchKey.length()));
+			}
+			catch (...) {
+				return -1;
+			}
+		}
+	}
+	return -1;
+}
+
 
 int __stdcall convertScaledIntToCoord(int thisPtr, int scaledValue)
 {
@@ -63,27 +84,6 @@ int __fastcall hookedConvertScaledIntToCoord(int thisPtr, void* edx, int scaledV
 	return convertScaledIntToCoord(thisPtr, scaledValue);
 }
 
-
-int GetConfigInt(const std::string& key) {
-	std::ifstream file(std::filesystem::current_path() / "workshop/scripts/sfm/mainmenu/an0n/cfg/hitbox_size.cfg");
-	if (!file.is_open()) return -1;
-
-	std::string line;
-	std::string searchKey = key + "=";
-
-	while (std::getline(file, line)) {
-		if (line.compare(0, searchKey.length(), searchKey) == 0) {
-			try {
-				return std::stoi(line.substr(searchKey.length()));
-			}
-			catch (...) {
-				return -1;
-			}
-		}
-	}
-	return -1;
-}
-
 void patchHitbox(uintptr_t base) {
 	uintptr_t base_addr = (uintptr_t)base;
 
@@ -101,6 +101,8 @@ void patchHitbox(uintptr_t base) {
 	Patch::WriteBytes((void*)(base_addr + 0x19C5DB), &left_val, sizeof(left_val));
 }
 
+static TrampolineHook g_convertScaledIntToCoordHook;
+
 bool CPlugin_ScriptUpload::Load( CreateInterfaceFn interfaceFactory, CreateInterfaceFn gameServerFactory )
 {
 	LOG( "Keyframe Hitbox Patch loading...\n" );
@@ -114,16 +116,16 @@ bool CPlugin_ScriptUpload::Load( CreateInterfaceFn interfaceFactory, CreateInter
 	}
 
 	{
-		uintptr_t addr3 = (uintptr_t)ifm_base + 0x1651E0;
+		uintptr_t hookAddr = (uintptr_t)ifm_base + 0x1651E0;
+
 		int no_px = GetConfigInt("no_px");
 		if (no_px != 1) {
-
-			Patch::WriteJump((void*)addr3, (void*)hookedConvertScaledIntToCoord, 0);
+			g_convertScaledIntToCoordHook.Install(hookAddr,(void*)&hookedConvertScaledIntToCoord,5);
 		}
-		std::string cwd = std::filesystem::current_path().string();
-		std::filesystem::path vdfPath = std::filesystem::current_path() / "workshop/addons/timelineprecisionpatch.vdf";
 
-		cleanupPlugins(vdfPath.string());
+		std::string cwd = std::filesystem::current_path().string();
+		cleanupPlugins(std::string(PLUGIN_NAME));
+
 		patchHitbox((uintptr_t)ifm_base);
 
 	}
