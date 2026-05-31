@@ -1,5 +1,3 @@
-// dllmain.cpp : Defines the entry point for the DLL application.
-
 #include <windows.h>
 #include <cstdint>
 #include <cstring>
@@ -320,7 +318,7 @@ bool InstallQWidgetUpdateHook()
     oQWidget_update = g_QWidgetUpdateHook.GetOriginal<fnQWidget_update>();
     return true;
 }
-
+// -----------------------------------------------------------------------------
 
 bool CPlugin_ScriptUpload::Load(CreateInterfaceFn interfaceFactory, CreateInterfaceFn gameServerFactory)
 {
