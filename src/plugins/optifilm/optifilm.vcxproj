@@ -30,7 +30,7 @@
     <ProjectGuid>{7C281B25-D4FB-45DC-B110-DA0A5C9FEACC}</ProjectGuid>
     <RootNamespace>scriptupload</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>optifilm_v1</ProjectName>
+    <ProjectName>optifilm_v1a</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -124,7 +124,7 @@ echo     "file" "addons/%dllname%.dll"
 
 echo }
 
-) &gt; "$(TargetDir)%SHORT_NAME%.vdf"</Command>
+) &gt; "$(TargetDir)optifilm.vdf"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

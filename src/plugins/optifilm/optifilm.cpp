@@ -232,6 +232,7 @@ const char* GetClassName(void* pWidget)
 // ------------------ Handle getting CQLowerTimestripWidget and hide it + resize parent ------------------
 typedef void(__fastcall* fnQWidget_update)(void* ecx, void* edx);
 typedef void(__thiscall* fnSetMaxHeight)(void* pWidget, int height);
+typedef void(__thiscall* fnSetUpdatesEnabled)(void* pWidget, bool update);
 typedef void* (__thiscall* fnQObject_parent)(void* pThis);
 fnQWidget_update oQWidget_update = nullptr;
 TrampolineHook g_QWidgetUpdateHook;
@@ -276,19 +277,21 @@ void __fastcall hkQWidget_update(void* pWidget, void* edx)
 
                 static fnQWidget_hide QWidget_hide = nullptr;
                 static fnSetMaxHeight QWidget_maxHeight = nullptr;
+                static fnSetUpdatesEnabled QWidget_updatesEnabled = nullptr;
                     
                 QWidget_hide = (fnQWidget_hide)GetProcAddress(hQtGui, "?hide@QWidget@@QAEXXZ");
                 QWidget_maxHeight = (fnSetMaxHeight)GetProcAddress(hQtGui, "?setMaximumHeight@QWidget@@QAEXH@Z");
+                QWidget_updatesEnabled = (fnSetUpdatesEnabled)GetProcAddress(hQtGui, "?setUpdatesEnabled@QWidget@@QAEX_N@Z");
                     
 
                 if (QWidget_hide && QWidget_maxHeight)
                 {
-                    QWidget_hide(g_pTimestripWidgetLowerTimeline);
-                    //QWidget_maxHeight(g_pTimestripWidgetLowerTimeline,0);
-                    QWidget_hide(g_pTimestripWidgetLowerMotion);
-                    //QWidget_maxHeight(g_pTimestripWidgetLowerMotion,0);
-                    QWidget_hide(g_pTimestripWidgetLowerGraph);
-                    //QWidget_maxHeight(g_pTimestripWidgetLowerGraph,0);
+                    //QWidget_hide(g_pTimestripWidgetLowerTimeline);
+                    QWidget_updatesEnabled(g_pTimestripWidgetLowerTimeline,false);
+                    //QWidget_hide(g_pTimestripWidgetLowerMotion);
+                    QWidget_updatesEnabled(g_pTimestripWidgetLowerMotion, false);
+                    //QWidget_hide(g_pTimestripWidgetLowerGraph);
+                    QWidget_updatesEnabled(g_pTimestripWidgetLowerGraph, false);
                     g_pTimestripWidgetLowerTimeline = nullptr;
                     lowerHidden = true;
                        
@@ -319,6 +322,22 @@ bool InstallQWidgetUpdateHook()
     return true;
 }
 // -----------------------------------------------------------------------------
+
+
+// future keybind code
+DWORD WINAPI KeyMonitorThread(LPVOID lpParam)
+{
+    while (true)
+    {
+        if (GetAsyncKeyState(VK_F5) & 0x8000)
+        {
+
+            Sleep(300);
+        }
+        Sleep(10);
+    }
+    return 0;
+}
 
 bool CPlugin_ScriptUpload::Load(CreateInterfaceFn interfaceFactory, CreateInterfaceFn gameServerFactory)
 {
@@ -363,5 +382,6 @@ bool CPlugin_ScriptUpload::Load(CreateInterfaceFn interfaceFactory, CreateInterf
         Patch::WriteBytes((void*)(engine_base + 0x361470), &delay, sizeof(double));
         OutputDebugStringA("[SFM] Reduced Engine Pump wait to 2ms\n");
     }
+    //CreateThread(nullptr, 0, KeyMonitorThread, nullptr, 0, nullptr);
     return true;
 }
