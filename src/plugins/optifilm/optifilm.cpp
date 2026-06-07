@@ -8,12 +8,14 @@
 #include "safetyhook.hpp"
 #include <string>
 #include "config.h"
-
+#include <fstream>
+#include "WarnOverlay.h"
+volatile ULONG g_lastFaultTick = 0;
 // Plugin definitions
 class CPlugin_ScriptUpload : public IServerPluginCallbacks
 {
     bool Load(CreateInterfaceFn interfaceFactory, CreateInterfaceFn gameServerFactory) override;
-    void Unload(void) override {}
+    void Unload(void) override {};
     void Pause(void) override {}
     void UnPause(void) override {}
     const char* GetPluginDescription(void) override { return "Optifilm Patch"; }
@@ -42,9 +44,12 @@ IServerPluginCallbacks* g_pPlugin = &g_PluginScriptUpload;
 static uintptr_t ifm_base = (uintptr_t)GetModuleHandleW(L"ifm.dll");
 static uintptr_t mat_base = (uintptr_t)GetModuleHandleW(L"materialsystem.dll");
 static uintptr_t engine_base = (uintptr_t)GetModuleHandleW(L"engine.dll");
+static uintptr_t vstdlib_base = (uintptr_t)GetModuleHandleW(L"vstdlib.dll");
 HMODULE hQtGui = GetModuleHandleA("qtgui4.dll");
 HMODULE hQtCore = GetModuleHandleA("QtCore4.dll");
 typedef uint32_t _DWORD;
+
+
 
 
 // ------------------ Handle throttling the FK lag on IK Rigs ------------------
@@ -292,7 +297,7 @@ void __fastcall hkQWidget_update(void* pWidget, void* edx)
                     QWidget_updatesEnabled(g_pTimestripWidgetLowerMotion, false);
                     //QWidget_hide(g_pTimestripWidgetLowerGraph);
                     QWidget_updatesEnabled(g_pTimestripWidgetLowerGraph, false);
-                    g_pTimestripWidgetLowerTimeline = nullptr;
+                    
                     lowerHidden = true;
                        
                 }
@@ -324,23 +329,108 @@ bool InstallQWidgetUpdateHook()
 // -----------------------------------------------------------------------------
 
 
-// future keybind code
-DWORD WINAPI KeyMonitorThread(LPVOID lpParam)
-{
-    while (true)
-    {
-        if (GetAsyncKeyState(VK_F5) & 0x8000)
-        {
+// ------------------ Not used yet, maybe in the future ------------------
+#include <intrin.h>
+struct FakeQRect32 {
+    int xp1; int yp1; int xp2; int yp2;
+};
 
-            Sleep(300);
+static safetyhook::InlineHook g_boundingRectHook;
+FakeQRect32* __fastcall hooked_boundingRect(void* thiz, void* edx, FakeQRect32* result_ptr, void* qstring_ptr)
+{
+    uintptr_t returnAddress = reinterpret_cast<uintptr_t>(_ReturnAddress());
+    uintptr_t callAddress = ifm_base + 0x19BCB6;
+
+    if (returnAddress > callAddress && returnAddress <= callAddress + 7) {
+        if (result_ptr) {
+            result_ptr->xp1 = 0;
+            result_ptr->yp1 = 0;
+            result_ptr->xp2 = -1; 
+            result_ptr->yp2 = -1;
         }
-        Sleep(10);
+        return result_ptr;
     }
-    return 0;
+    return g_boundingRectHook.thiscall<FakeQRect32*>(thiz, result_ptr, qstring_ptr);
+}
+
+void setupBoundingRectHook() {
+    HMODULE qtModule = hQtGui;
+    if (!qtModule) return;
+
+    auto target_func = reinterpret_cast<void*>(GetProcAddress(qtModule, "?boundingRect@QFontMetrics@@QBE?AVQRect@@ABVQString@@@Z"));
+
+    if (target_func) {
+        g_boundingRectHook = safetyhook::create_inline(target_func, reinterpret_cast<void*>(hooked_boundingRect));
+    }
+}
+
+bool patchVstOnExit = false;
+bool CheckVstdlibBytes(const std::filesystem::path& dllPath)
+{
+    uint8_t expected[] = { 0x40, 0x00, 0x8D, 0x4E, 0x08, 0xE8, 0xA8, 0x53, 0x00, 0x00, 0x8B, 0x4E, 0x20, 0x8D, 0x41, 0xFF, 0xF7, 0xD0 };
+    uint8_t actual[sizeof(expected)];
+
+    if (!Patch::ReadFileBytes(dllPath.string().c_str(), 0xCE0E, actual, sizeof(actual)))
+        return false;
+
+    return memcmp(actual, expected, sizeof(expected)) == 0;
+}
+// -----------------------------------------------------------------------------
+
+using fnProcessAnimationDrivenValues = int(__cdecl*)(int, int*, int, int, float*);
+static fnProcessAnimationDrivenValues oProcessAnimationDrivenValues = nullptr;
+static TrampolineHook g_ProcessAnimHook;
+static uintptr_t g_lastFaultRip = 0; 
+static int AnimFaultFilter(unsigned int code, EXCEPTION_POINTERS* ep)
+{
+    if (code != EXCEPTION_ACCESS_VIOLATION) {
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+    g_lastFaultRip = (uintptr_t)ep->ExceptionRecord->ExceptionAddress;
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static int CallProcessAnimSafe(int a1, int* a2, int a3, int a4, float* a5)
+{
+    __try
+    {
+        return oProcessAnimationDrivenValues(a1, a2, a3, a4, a5);
+    }
+    __except (AnimFaultFilter(GetExceptionCode(), GetExceptionInformation()))
+    {
+        return 0;
+    }
+}
+
+static int __cdecl hkProcessAnimationDrivenValues(int a1, int* a2, int a3, int a4, float* a5)
+{
+    g_lastFaultRip = 0;
+    int result = CallProcessAnimSafe(a1, a2, a3, a4, a5);
+    if (g_lastFaultRip){
+        WarnOverlay::Get().NotifyFault();
+    }
+    return result;
+}
+
+bool InstallProcessAnimHook()
+{
+    //need to actually start installing this way.
+    if (!g_ProcessAnimHook.Install(ifm_base + 0x347A40,
+        (void*)&hkProcessAnimationDrivenValues, 9))
+    {
+        OutputDebugStringA("[SFM] Failed to install ProcessAnimationDrivenValues hook\n");
+        return false;
+    }
+    oProcessAnimationDrivenValues =
+        g_ProcessAnimHook.GetOriginal<fnProcessAnimationDrivenValues>();
+    OutputDebugStringA("[SFM] Installed ProcessAnimationDrivenValues hook\n");
+    WarnOverlay::Get().Start();
+    return true;
 }
 
 bool CPlugin_ScriptUpload::Load(CreateInterfaceFn interfaceFactory, CreateInterfaceFn gameServerFactory)
 {
+
     LOG("Optifilm Patch loading...\n");
     if (ifm_base == NULL)
     {
@@ -368,7 +458,8 @@ bool CPlugin_ScriptUpload::Load(CreateInterfaceFn interfaceFactory, CreateInterf
     if (cfg.GetBool("opt4_timelineFPSBoost")) {
         InstallQWidgetUpdateHook();
         // Patch horrible inefficient Timeline numbers centering method out, makes it right aligned but who cares
-        //Literally saves 10-20 frames
+        //Literally saves 5-10 frames
+        //setupBoundingRectHook();
         BYTE patch[] = { 0x90, 0x90, 0x90, 0x90, 0x90,
                      0x90, 0x90, 0x90, 0x90, 0x90,
                      0x90, 0x90, 0x90, 0x90, 0x90,
@@ -377,11 +468,24 @@ bool CPlugin_ScriptUpload::Load(CreateInterfaceFn interfaceFactory, CreateInterf
     }
 
     if (cfg.GetBool("opt5_enginePump2ms")) {
-        //Engine-Pump 20ms wait --> 2ms
-        double delay = 0.002;
+        //Engine-Pump 20ms wait --> 8ms
+        double delay = 0.008;
         Patch::WriteBytes((void*)(engine_base + 0x361470), &delay, sizeof(double));
         OutputDebugStringA("[SFM] Reduced Engine Pump wait to 2ms\n");
     }
+    
+    if (cfg.GetBool("opt6_skipResMsg")) {
+        BYTE patch[] = { 0x90, 0x90, 0x8B, 0xCE, 0xE8, 0x12,
+            0x8C, 0x6D, 0x00, 0x3B, 0x86, 0x2C, 0x04, 0x00,
+             0x00 , 0xE9 , 0x8C , 0x00 , 0x00 , 0x00 , 0x90};
+        Patch::WriteBytes((void*)(ifm_base + 0x2BE0A5), patch, sizeof(patch));
+    }
+
+    if (cfg.GetBool("opt7_stopMDLCrash")) {
+        InstallProcessAnimHook();
+    }
+   
+
     //CreateThread(nullptr, 0, KeyMonitorThread, nullptr, 0, nullptr);
     return true;
 }

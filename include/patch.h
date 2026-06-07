@@ -41,4 +41,6 @@ namespace Patch
 	void WriteString( void* address, const char* string );
 	void WriteBytes(void* address, void* data, int size);
 	void ReadBytes(void* address, void* buffer, int size);
+	bool WriteFilePatch(const char* filename, size_t offset, void* data, size_t size);
+	bool ReadFileBytes(const char* filename, size_t offset, void* buffer, size_t size);
 }

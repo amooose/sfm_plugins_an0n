@@ -4,6 +4,7 @@
 
 #include <string.h>
 
+#include <fstream>
 void* Patch::WriteJump( void* address, void* trampoline, int pad )
 {
     DWORD oldProtect;
@@ -58,4 +59,24 @@ void Patch::ReadBytes(void* address, void* buffer, int size)
     // Reading generally does not require changing memory protection 
     // unless the target memory is specifically marked as NOACCESS.
     memcpy(buffer, address, size);
+}
+
+bool Patch::WriteFilePatch(const char* filename, size_t offset, void* data, size_t size)
+{
+    std::fstream f(filename, std::ios::in | std::ios::out | std::ios::binary);
+    if (!f.is_open())
+        return false;
+    f.seekp(offset);
+    f.write((char*)data, size);
+    return f.good();
+}
+
+bool Patch::ReadFileBytes(const char* filename, size_t offset, void* buffer, size_t size)
+{
+    std::ifstream f(filename, std::ios::binary);
+    if (!f.is_open())
+        return false;
+    f.seekg(offset);
+    f.read((char*)buffer, size);
+    return f.good();
 }
